@@ -12,7 +12,14 @@ import uuid
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from .const import MAX_TEXT_LENGTH, REACTIONS
+from .const import (
+    DEFAULT_PRIORITY,
+    MAX_TAG_LENGTH,
+    MAX_TAGS,
+    MAX_TEXT_LENGTH,
+    PRIORITIES,
+    REACTIONS,
+)
 
 Thread = dict[str, Any]
 Message = dict[str, Any]
@@ -41,8 +48,10 @@ class BoardError(Exception):
 class Board:
     """Threads between a fixed set of users.
 
-    Every thread has one sender and one recipient. Inboxes are views:
-    a user's inbox holds the threads whose recipient they are.
+    A thread is a post (its first message plus tags and priority) with
+    comments (all further messages). Every thread has one sender and one
+    recipient. Inboxes are views: a user's inbox holds the threads whose
+    recipient they are.
     """
 
     def __init__(self, store: StoreLike, users: list[str]) -> None:
@@ -54,6 +63,9 @@ class Board:
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
         self._threads = {t["id"]: t for t in data.get("threads", [])}
+        for thread in self._threads.values():  # threads stored before tags/priority existed
+            thread.setdefault("tags", [])
+            thread.setdefault("priority", DEFAULT_PRIORITY)
 
     # --- queries -------------------------------------------------------------
 
@@ -67,7 +79,14 @@ class Board:
 
     # --- commands ------------------------------------------------------------
 
-    def create_thread(self, user: str, recipient: str, text: str) -> Thread:
+    def create_thread(
+        self,
+        user: str,
+        recipient: str,
+        text: str,
+        tags: list[str] | None = None,
+        priority: str = DEFAULT_PRIORITY,
+    ) -> Thread:
         self._require_user(user)
         self._require_user(recipient)
         if recipient == user:
@@ -78,6 +97,8 @@ class Board:
             "sender": user,
             "recipient": recipient,
             "archived": False,
+            "tags": _clean_tags(tags or []),
+            "priority": _check_priority(priority),
             "messages": [message],
             "last_read": {user: message["created"]},
         }
@@ -114,6 +135,26 @@ class Board:
                 del reactions[emoji]
         else:
             reactors.append(user)
+        self._changed()
+
+    def update_post(
+        self,
+        user: str,
+        thread_id: str,
+        tags: list[str] | None = None,
+        priority: str | None = None,
+    ) -> None:
+        """Change post properties. Allowed for both participants; no read-state effect."""
+        thread = self._thread(user, thread_id)
+        if tags is not None:
+            thread["tags"] = _clean_tags(tags)
+        if priority is not None:
+            thread["priority"] = _check_priority(priority)
+        self._changed()
+
+    def delete_thread(self, user: str, thread_id: str) -> None:
+        """Remove a post with all comments. Allowed for both participants."""
+        del self._threads[self._thread(user, thread_id)["id"]]
         self._changed()
 
     def set_archived(self, user: str, thread_id: str, archived: bool) -> None:
@@ -199,3 +240,24 @@ def _clean_text(text: str) -> str:
     if len(text) > MAX_TEXT_LENGTH:
         raise BoardError("invalid_text", f"Max. {MAX_TEXT_LENGTH} characters")
     return text
+
+
+def _clean_tags(tags: list[str]) -> list[str]:
+    """Trim, drop empties and case-insensitive duplicates, keep order."""
+    cleaned: dict[str, str] = {}
+    for tag in tags:
+        tag = tag.strip()
+        if not tag:
+            continue
+        if len(tag) > MAX_TAG_LENGTH:
+            raise BoardError("invalid_tags", f"Max. {MAX_TAG_LENGTH} characters per tag")
+        cleaned.setdefault(tag.casefold(), tag)
+    if len(cleaned) > MAX_TAGS:
+        raise BoardError("invalid_tags", f"Max. {MAX_TAGS} tags")
+    return list(cleaned.values())
+
+
+def _check_priority(priority: str) -> str:
+    if priority not in PRIORITIES:
+        raise BoardError("invalid_priority", f"Unknown priority: {priority}")
+    return priority

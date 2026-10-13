@@ -80,6 +80,12 @@ async def test_full_flow(hass: HomeAssistant, setup) -> None:
     assert hass.states.get(sensor_alice).state == "on"
     assert hass.states.get(sensor_alice).attributes["unread_threads"] == 1
 
+    # Both may change post properties.
+    result = await _cmd(bob_ws, "update", thread_id=thread["id"], tags=["Einkauf"], priority="high")
+    assert result["success"]
+    result = await _cmd(bob_ws, "update", thread_id=thread["id"], priority="urgent")
+    assert result["error"]["code"] == "invalid_format"
+
     # Bob archives: archived threads don't count as unread.
     assert (await _cmd(bob_ws, "archive", thread_id=thread["id"], archived=True))["success"]
     await hass.async_block_till_done()
@@ -118,3 +124,13 @@ async def test_config_flow(hass: HomeAssistant, hass_admin_user) -> None:
         result["flow_id"], {CONF_USERS: [hass_admin_user.id, bob.id]}
     )
     assert result["type"] == "create_entry"
+
+
+async def test_delete(hass: HomeAssistant, setup) -> None:
+    _, bob, alice_ws, bob_ws = setup
+    await _cmd(alice_ws, "create", recipient=bob.id, text="Hi", tags=["Test"], priority="low")
+    (thread,) = (await _subscribe(bob_ws))["threads"]
+    assert thread["tags"] == ["Test"] and thread["priority"] == "low"
+    assert (await _cmd(bob_ws, "delete", thread_id=thread["id"]))["success"]
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.message_board_unread_bob").state == "off"

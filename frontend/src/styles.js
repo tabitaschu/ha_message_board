@@ -35,4 +35,34 @@ export const sharedStyles = css`
     border-radius: 50%;
     background: var(--primary-color);
   }
+
+  /* Priority colour, set once per class and reused by borders, badges and buttons. */
+  .prio-low {
+    --prio-color: var(--disabled-text-color, #9e9e9e);
+  }
+  .prio-normal {
+    --prio-color: var(--primary-color);
+  }
+  .prio-high {
+    --prio-color: var(--error-color, #db4437);
+  }
+  button[class^="prio-"],
+  .prio-badge {
+    color: var(--text-primary-color);
+    background: var(--prio-color);
+  }
+  .prio-badge {
+    padding: 0 8px;
+    border-radius: 10px;
+    font-size: 0.8em;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    color: var(--primary-text-color);
+    background: rgba(var(--rgb-primary-color), 0.15);
+  }
 `;

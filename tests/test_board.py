@@ -136,3 +136,71 @@ def test_listeners_notified_and_removable(board: Board) -> None:
     remove()
     board.create_thread(A, B, "2")
     assert calls == [1]
+
+
+def test_post_properties_on_create(board: Board) -> None:
+    t = board.create_thread(
+        A, B, "Einkauf", tags=[" Haushalt ", "haushalt", "Einkauf", ""], priority="high"
+    )
+    assert t["tags"] == ["Haushalt", "Einkauf"]  # trimmed, case-insensitive dedupe
+    assert t["priority"] == "high"
+
+
+def test_defaults(board: Board) -> None:
+    t = board.create_thread(A, B, "Hi")
+    assert t["tags"] == [] and t["priority"] == "normal"
+
+
+def test_both_can_update_post_without_unread(board: Board) -> None:
+    with freeze_time("2026-01-01 10:00"):
+        t = board.create_thread(A, B, "Hi")
+        board.mark_read(B, t["id"])
+    with freeze_time("2026-01-01 11:00"):
+        board.update_post(B, t["id"], tags=["Garten"])
+        board.update_post(A, t["id"], priority="low")
+    assert t["tags"] == ["Garten"] and t["priority"] == "low"
+    assert board.unread_count(A) == board.unread_count(B) == 0
+
+
+@pytest.mark.parametrize(
+    ("tags", "priority"),
+    [(["x" * 31], None), ([f"t{i}" for i in range(11)], None), (None, "urgent")],
+)
+def test_invalid_post_properties_rejected(board: Board, tags, priority) -> None:
+    t = board.create_thread(A, B, "Hi")
+    with pytest.raises(BoardError):
+        board.update_post(A, t["id"], tags=tags, priority=priority)
+
+
+@pytest.mark.parametrize("deleter", [A, B])
+def test_both_can_delete(board: Board, deleter: str) -> None:
+    t = board.create_thread(A, B, "weg damit")
+    board.delete_thread(deleter, t["id"])
+    assert board.threads_for(A) == board.threads_for(B) == []
+
+
+def test_outsider_cannot_update_or_delete(board: Board) -> None:
+    t = board.create_thread(A, B, "Hi")
+    with pytest.raises(BoardError):
+        board.update_post(OUTSIDER, t["id"], priority="high")
+    with pytest.raises(BoardError):
+        board.delete_thread(OUTSIDER, t["id"])
+
+
+async def test_old_data_gets_post_defaults() -> None:
+    old = {
+        "threads": [
+            {
+                "id": "t",
+                "sender": A,
+                "recipient": B,
+                "archived": False,
+                "last_read": {},
+                "messages": [],
+            }
+        ]
+    }
+    board = Board(FakeStore(old), [A, B])
+    await board.async_load()
+    thread = board._threads["t"]
+    assert thread["tags"] == [] and thread["priority"] == "normal"

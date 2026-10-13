@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util.hass_dict import HassKey
 
 from .board import Board, BoardError, is_unread
-from .const import DOMAIN, REACTIONS
+from .const import DEFAULT_PRIORITY, DOMAIN, PRIORITIES, REACTIONS
 
 DATA_BOARD: HassKey[Board] = HassKey(DOMAIN)
 
@@ -50,7 +50,7 @@ async def ws_subscribe(
 ) -> None:
     """Stream the user's threads.
 
-    The first event carries static context (me, users, reactions),
+    The first event carries static context (me, users, reactions, priorities),
     every following event only the updated threads.
     """
     if (board := _board(hass, connection, msg["id"])) is None:
@@ -74,7 +74,7 @@ async def ws_subscribe(
 
     connection.subscriptions[msg["id"]] = board.add_listener(push)
     connection.send_result(msg["id"])
-    push(me=me, users=users, reactions=REACTIONS)
+    push(me=me, users=users, reactions=REACTIONS, priorities=PRIORITIES)
 
 
 def _mutation(command: str, schema: dict[Any, Any], apply: Apply) -> Callable[..., None]:
@@ -100,12 +100,31 @@ def _mutation(command: str, schema: dict[Any, Any], apply: Apply) -> Callable[..
 _THREAD = {vol.Required("thread_id"): str}
 _MESSAGE = {**_THREAD, vol.Required("message_id"): str}
 _TEXT = {vol.Required("text"): str}
+_TAGS = vol.All([str])
+_PRIORITY = vol.In(PRIORITIES)
 
 _MUTATIONS = (
     _mutation(
         "create",
-        {vol.Required("recipient"): str, **_TEXT},
-        lambda b, user, m: b.create_thread(user, m["recipient"], m["text"]),
+        {
+            vol.Required("recipient"): str,
+            **_TEXT,
+            vol.Optional("tags", default=[]): _TAGS,
+            vol.Optional("priority", default=DEFAULT_PRIORITY): _PRIORITY,
+        },
+        lambda b, user, m: b.create_thread(
+            user, m["recipient"], m["text"], m["tags"], m["priority"]
+        ),
+    ),
+    _mutation(
+        "update",
+        {**_THREAD, vol.Optional("tags"): _TAGS, vol.Optional("priority"): _PRIORITY},
+        lambda b, user, m: b.update_post(user, m["thread_id"], m.get("tags"), m.get("priority")),
+    ),
+    _mutation(
+        "delete",
+        _THREAD,
+        lambda b, user, m: b.delete_thread(user, m["thread_id"]),
     ),
     _mutation(
         "reply",

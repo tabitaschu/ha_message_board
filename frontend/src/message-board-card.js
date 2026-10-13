@@ -1,9 +1,19 @@
 import { LitElement, css, html } from "lit";
 import { BoardApi } from "./api.js";
-import "./composer.js";
+import "./menu.js";
+import { openMenuOnContext, postMenuItems, postProperties } from "./parts.js";
+import "./post-form.js";
 import { sharedStyles } from "./styles.js";
 import "./thread-view.js";
-import { lastMessage, notifyError, relativeTime, seenByOther } from "./util.js";
+import {
+  define,
+  knownTags,
+  lastMessage,
+  notifyError,
+  relativeTime,
+  seenByOther,
+  sortByPriority,
+} from "./util.js";
 
 /**
  * Lovelace card: one inbox per board member.
@@ -13,7 +23,7 @@ import { lastMessage, notifyError, relativeTime, seenByOther } from "./util.js";
  */
 class MessageBoardCard extends LitElement {
   static properties = {
-    _data: { state: true }, // { me, users, reactions, threads } from the subscription
+    _data: { state: true }, // { me, users, reactions, priorities, threads } from the subscription
     _error: { state: true },
     _openThreadId: { state: true },
     _activeInbox: { state: true },
@@ -80,11 +90,13 @@ class MessageBoardCard extends LitElement {
   }
 
   get _ctx() {
-    const { me, users, reactions } = this._data;
+    const { me, users, reactions, priorities, threads } = this._data;
     return {
       api: this._api,
       me,
       reactions,
+      priorities,
+      knownTags: knownTags(threads),
       names: Object.fromEntries(users.map((u) => [u.id, u.name])),
       language: this._hass.locale?.language ?? this._hass.language,
     };
@@ -147,14 +159,20 @@ class MessageBoardCard extends LitElement {
               <h3>${inbox.title} ${this._renderBadge(inbox)}</h3>
               ${
                 inbox.composeTo
-                  ? html`<mb-composer
+                  ? html`<mb-post-form
+                      withText
                       placeholder="Neue Nachricht an ${inbox.composeTo.name}…"
-                      .send=${(text) => ctx.api.create(inbox.composeTo.id, text)}
-                    ></mb-composer>`
+                      .priorities=${ctx.priorities}
+                      .suggestions=${ctx.knownTags}
+                      .send=${(post) => ctx.api.create(inbox.composeTo.id, post)}
+                    ></mb-post-form>`
                   : ""
               }
               ${this._renderThreadList(
-                inbox.threads.filter((t) => !t.archived),
+                sortByPriority(
+                  inbox.threads.filter((t) => !t.archived),
+                  ctx.priorities,
+                ),
                 ctx,
               )}
               ${this._renderArchive(
@@ -191,23 +209,25 @@ class MessageBoardCard extends LitElement {
   }
 
   _renderThreadItem(thread, ctx) {
-    const replies = thread.messages.length - 1;
+    const comments = thread.messages.length - 1;
     return html`
-      <li>
+      <li class="post prio-${thread.priority}" @contextmenu=${openMenuOnContext}>
         <button
-          class="thread ${thread.unread ? "unread" : ""}"
+          class="open ${thread.unread ? "unread" : ""}"
           @click=${() => (this._openThreadId = thread.id)}
         >
-          ${thread.unread ? html`<span class="dot"></span>` : ""}
-          <span class="body">
+          <span class="headline">
+            ${thread.unread ? html`<span class="dot"></span>` : ""}
             <span class="preview">${thread.messages[0].text}</span>
-            <span class="meta">
-              ${relativeTime(lastMessage(thread).created, ctx.language)}
-              ${replies ? html` · ${replies} ${replies === 1 ? "Antwort" : "Antworten"}` : ""}
-              ${seenByOther(thread, ctx.me) ? html` · gelesen ✓` : ""}
-            </span>
+          </span>
+          <span class="properties">${postProperties(thread)}</span>
+          <span class="meta">
+            ${relativeTime(lastMessage(thread).created, ctx.language)}
+            ${comments ? ` · ${comments} ${comments === 1 ? "Kommentar" : "Kommentare"}` : ""}
+            ${seenByOther(thread, ctx.me) ? " · gelesen ✓" : ""}
           </span>
         </button>
+        <mb-menu .items=${postMenuItems(this, ctx, thread)}></mb-menu>
       </li>
     `;
   }
@@ -266,26 +286,44 @@ class MessageBoardCard extends LitElement {
         list-style: none;
         margin: 0;
         padding: 0;
-      }
-      button.thread {
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: 8px;
-        width: 100%;
-        padding: 8px 4px;
-        border-radius: 0;
-        border-bottom: 1px solid var(--divider-color);
+      }
+      li.post {
+        display: flex;
+        align-items: flex-start;
+        border-radius: 12px;
+        border-left: 4px solid var(--prio-color);
+        background: var(--secondary-background-color);
+      }
+      button.open {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+        padding: 10px 12px;
+        border-radius: 12px;
         text-align: left;
         color: var(--primary-text-color);
         background: none;
       }
-      button.thread.unread .preview {
+      button.open.unread .preview {
         font-weight: 600;
       }
-      .body {
+      .headline {
         display: flex;
-        flex-direction: column;
-        min-width: 0;
+        align-items: center;
+        gap: 8px;
+      }
+      .properties {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      li.post mb-menu {
+        margin: 6px 4px 0 0;
       }
       .preview {
         display: -webkit-box;
@@ -305,11 +343,13 @@ class MessageBoardCard extends LitElement {
   ];
 }
 
-customElements.define("message-board-card", MessageBoardCard);
+define("message-board-card", MessageBoardCard);
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "message-board-card",
-  name: "Message Board",
-  description: "Inboxen mit Threads, Antworten und Reaktionen.",
-});
+if (!window.customCards.some((c) => c.type === "message-board-card")) {
+  window.customCards.push({
+    type: "message-board-card",
+    name: "Message Board",
+    description: "Inboxen mit Posts, Tags, Priorität und Kommentaren.",
+  });
+}

@@ -1,6 +1,6 @@
 import { LitElement, css, html } from "lit";
 import { sharedStyles } from "./styles.js";
-import { notifyError } from "./util.js";
+import { define, notifyError } from "./util.js";
 
 /**
  * Text input with send button. Used for new threads, replies and edits.
@@ -95,4 +95,4 @@ class MbComposer extends LitElement {
   ];
 }
 
-customElements.define("mb-composer", MbComposer);
+define("mb-composer", MbComposer);

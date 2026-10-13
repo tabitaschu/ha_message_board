@@ -11,8 +11,17 @@ export class BoardApi {
     return this._connection.subscribeMessage(onEvent, { type: `${PREFIX}/subscribe` });
   }
 
-  create(recipient, text) {
-    return this._send("create", { recipient, text });
+  create(recipient, { text, tags, priority }) {
+    return this._send("create", { recipient, text, tags, priority });
+  }
+
+  /** Change post properties; pass only what changes ({ tags, priority }). */
+  update(threadId, properties) {
+    return this._send("update", { thread_id: threadId, ...properties });
+  }
+
+  delete(threadId) {
+    return this._send("delete", { thread_id: threadId });
   }
 
   reply(threadId, text) {

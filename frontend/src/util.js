@@ -1,5 +1,10 @@
 // Small helpers shared by the card's components.
 
+/** Register a custom element once (the bundle may be loaded twice, e.g. via two URLs). */
+export function define(name, constructor) {
+  if (!customElements.get(name)) customElements.define(name, constructor);
+}
+
 const UNITS = [
   ["year", 31536000],
   ["month", 2592000],
@@ -18,6 +23,22 @@ export function relativeTime(timestamp, language) {
   }
   return rtf.format(0, "second");
 }
+
+export const PRIORITY_LABELS = { low: "Niedrig", normal: "Normal", high: "Hoch" };
+
+/** Highest priority first; keeps the server's newest-activity order within a priority. */
+export const sortByPriority = (threads, priorities) =>
+  [...threads].sort((a, b) => priorities.indexOf(b.priority) - priorities.indexOf(a.priority));
+
+/** All tags in use, for suggestions (case-insensitive unique, sorted). */
+export function knownTags(threads) {
+  const tags = new Map();
+  for (const tag of threads.flatMap((t) => t.tags)) tags.set(tag.toLowerCase(), tag);
+  return [...tags.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/** Ask before destroying a post; returns true if confirmed. */
+export const confirmDelete = () => window.confirm("Post mit allen Kommentaren löschen?");
 
 export const lastMessage = (thread) => thread.messages[thread.messages.length - 1];
 

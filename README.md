@@ -1,7 +1,7 @@
 # Message Board für Home Assistant
 
-Inboxen mit Threads zwischen Home-Assistant-Benutzern: Posts, Antworten,
-feste Emoji-Reaktionen, Bearbeiten eigener Nachrichten, Archiv.
+Inboxen zwischen Home-Assistant-Benutzern: Posts mit Tags und Priorität,
+Kommentare darunter, feste Emoji-Reaktionen, Bearbeiten, Archiv, Löschen.
 
 ## Installation
 
@@ -12,19 +12,24 @@ feste Emoji-Reaktionen, Bearbeiten eigener Nachrichten, Archiv.
    mindestens zwei Benutzer wählen.
 4. Dashboard → Karte hinzufügen → **Message Board** (oder YAML: `type: custom:message-board-card`).
 
-Die Card wird von der Integration selbst ausgeliefert, eine Lovelace-Ressource ist nicht nötig.
+Die Integration liefert die Card selbst aus. Erscheint sie nicht in der Kartenauswahl, als Ressource
+eintragen (*Einstellungen → Dashboards → ⋮ → Ressourcen*): URL `/message_board/message-board-card.js?v=<Version>`,
+Typ *JavaScript-Modul*. `<Version>` = `version` aus `manifest.json`, nach jedem Update anpassen.
 
 ## Verhalten
 
 | Aktion | Wer | Zählt als ungelesen? |
 |---|---|---|
 | Neuer Post | jedes Mitglied, in die Inbox eines anderen | ja, beim Empfänger |
-| Antwort | beide Beteiligte | ja, beim anderen; holt den Thread aus dem Archiv |
-| Bearbeiten | nur Autor | nein |
+| Kommentar | beide Beteiligte | ja, beim anderen; holt den Post aus dem Archiv |
+| Text bearbeiten | nur Autor | nein |
+| Tags / Priorität ändern | beide Beteiligte | nein |
+| Post löschen (inkl. Kommentare) | beide Beteiligte | – |
 | Reaktion | beide Beteiligte | nein |
 | Archivieren | beide Beteiligte | archivierte Threads zählen nie |
 
-Ein Thread gilt als gelesen, sobald man ihn in der Card öffnet.
+Ein Post gilt als gelesen, sobald man ihn in der Card öffnet.
+Aktionen für einen Post: Menü „⋮“ oder Rechtsklick. Offene Posts sind nach Priorität sortiert.
 
 ## Schnittstelle
 
