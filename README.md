@@ -30,8 +30,18 @@ Typ *JavaScript-Modul*. `<Version>` = `version` aus `manifest.json`, nach jedem 
 | Archivieren | beide Beteiligte | archivierte Posts zählen nie |
 
 Ein Post gilt als gelesen, sobald man ihn in der Card öffnet.
+Ungelesene Posts sind eingefärbt und mit Punkt markiert. Wo man selbst geschrieben hat, zeigt die
+Kachel den Stand beim Gegenüber: „● Neu“ (noch nicht geöffnet) oder „✓ Gelesen“.
 Aktionen für einen Post (Bearbeiten, Archivieren, Löschen): Menü „⋮“ oder Rechtsklick.
 Listen sind nach neuester Aktivität sortiert; „⇅“ schaltet auf Priorität um (pro Browser gemerkt).
+
+## Memes / Reaction-GIFs
+
+GIFs (auch PNG, JPG, WebP) in `/config/message_board/memes/` ablegen, z. B. per File editor oder Samba.
+Der Dateiname ohne Endung ist das Kürzel (`bitte.gif` → `:bitte:`, nur a–z, 0–9, `_` und `-`).
+In Posts und Kommentaren werden bekannte Kürzel als Bild angezeigt; der Button „GIF“ an den
+Eingabefeldern zeigt alle verfügbaren Bilder. Neue Dateien erscheinen ohne Neustart.
+Die Bilder werden vom eigenen HA-Server geladen, es gehen keine Anfragen an externe Dienste.
 
 ## Schnittstelle
 

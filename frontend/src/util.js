@@ -52,11 +52,22 @@ export const lastMessage = (thread) => thread.messages[thread.messages.length - 
 export const otherParticipant = (thread, me) =>
   thread.sender === me ? thread.recipient : thread.sender;
 
-/** True if the other participant has read the thread since my last message. */
-export function seenByOther(thread, me) {
-  const last = lastMessage(thread);
-  if (last.author !== me) return false;
-  return (thread.last_read[otherParticipant(thread, me)] ?? 0) >= last.created;
+/**
+ * Whether the other participant has read my latest message in the thread:
+ * "read", "new" (not yet), or null if I have not written anything there.
+ */
+export function readStatus(thread, me) {
+  const mine = thread.messages.filter((m) => m.author === me);
+  if (!mine.length) return null;
+  const readUntil = thread.last_read[otherParticipant(thread, me)] ?? 0;
+  return readUntil >= mine[mine.length - 1].created ? "read" : "new";
+}
+
+/** Value of a text field with `snippet` inserted at the cursor (or appended). */
+export function insertAtCursor(field, snippet) {
+  const start = field.selectionStart ?? field.value.length;
+  const end = field.selectionEnd ?? start;
+  return field.value.slice(0, start) + snippet + field.value.slice(end);
 }
 
 /** Show an error as Home Assistant toast. */

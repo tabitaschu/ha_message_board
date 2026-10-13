@@ -37,9 +37,8 @@ export const sharedStyles = css`
   }
 
   /* Priority colour, set once per class and reused by borders, badges and buttons. */
-  .prio-info {
-    --prio-color: var(--info-color, #039be5);
-  }
+  /* Info and Niedrig share the calm grey: both mean "can wait". */
+  .prio-info,
   .prio-low {
     --prio-color: var(--disabled-text-color, #9e9e9e);
   }
@@ -58,6 +57,13 @@ export const sharedStyles = css`
     padding: 0 8px;
     border-radius: 10px;
     font-size: 0.8em;
+  }
+  img.meme {
+    display: block;
+    max-width: 100%;
+    max-height: 160px;
+    margin: 4px 0;
+    border-radius: 8px;
   }
   .tag {
     display: inline-flex;

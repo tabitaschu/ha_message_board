@@ -12,8 +12,10 @@ import {
   notifyError,
   relativeTime,
   SORTS,
-  seenByOther,
+  readStatus,
 } from "./util.js";
+
+const READ_STATUS_LABELS = { new: "● Neu", read: "✓ Gelesen" };
 
 const SORT_STORAGE_KEY = "message-board-sort";
 
@@ -31,6 +33,7 @@ class MessageBoardCard extends LitElement {
     _editOnOpen: { state: true },
     _activeInbox: { state: true },
     _sort: { state: true }, // key of SORTS, remembered per browser
+    _memes: { state: true }, // Map shortcode -> image URL
   };
 
   constructor() {
@@ -74,6 +77,7 @@ class MessageBoardCard extends LitElement {
     this._subscription = this._api.subscribe((event) => {
       this._data = { ...this._data, ...event };
     });
+    this._subscription.then(() => this._loadMemes()).catch(() => {}); // errors handled below
     this._subscription.catch((err) => {
       this._error = err.message;
       this._subscription = null;
@@ -106,6 +110,8 @@ class MessageBoardCard extends LitElement {
       reactions,
       priorities,
       knownTags: knownTags(threads),
+      memes: this._memes ?? new Map(),
+      loadMemes: this._loadMemes,
       names: Object.fromEntries(users.map((u) => [u.id, u.name])),
       language: this._hass.locale?.language ?? this._hass.language,
     };
@@ -179,6 +185,7 @@ class MessageBoardCard extends LitElement {
                       placeholder="Neuer Post an ${inbox.composeTo.name}…"
                       .priorities=${ctx.priorities}
                       .suggestions=${ctx.knownTags}
+                      .loadMemes=${ctx.loadMemes}
                       .send=${(post) => ctx.api.create(inbox.composeTo.id, post)}
                     ></mb-post-form>`
                   : ""
@@ -225,9 +232,13 @@ class MessageBoardCard extends LitElement {
 
   _renderThreadItem(thread, ctx) {
     const comments = thread.messages.length - 1;
+    const status = readStatus(thread, ctx.me);
     return html`
-      <li class="post prio-${thread.priority}" @contextmenu=${openMenuOnContext}>
-        <button class="open ${thread.unread ? "unread" : ""}" @click=${() => this._open(thread.id)}>
+      <li
+        class="post prio-${thread.priority} ${thread.unread ? "unread" : ""}"
+        @contextmenu=${openMenuOnContext}
+      >
+        <button class="open" @click=${() => this._open(thread.id)}>
           <span class="headline">
             ${thread.unread ? html`<span class="dot"></span>` : ""}
             <span class="title">${thread.title}</span>
@@ -241,8 +252,14 @@ class MessageBoardCard extends LitElement {
           <span class="meta">
             ${relativeTime(lastMessage(thread).created, ctx.language)}
             ${comments ? ` · ${comments} ${comments === 1 ? "Kommentar" : "Kommentare"}` : ""}
-            ${seenByOther(thread, ctx.me) ? " · gelesen ✓" : ""}
           </span>
+          ${
+            status
+              ? html`<span class="status ${status}" title="Status beim Gegenüber"
+                  >${READ_STATUS_LABELS[status]}</span
+                >`
+              : ""
+          }
         </button>
         <mb-menu
           .items=${postMenuItems(this, ctx, thread, { edit: () => this._open(thread.id, true) })}
@@ -250,6 +267,13 @@ class MessageBoardCard extends LitElement {
       </li>
     `;
   }
+
+  /** Fetch the meme list; keeps shortcode rendering in sync with the picker. */
+  _loadMemes = async () => {
+    const memes = await this._api.memes();
+    this._memes = new Map(memes.map((m) => [m.name, m.url]));
+    return memes;
+  };
 
   _open(threadId, edit = false) {
     this._editOnOpen = edit;
@@ -335,6 +359,9 @@ class MessageBoardCard extends LitElement {
         border-left: 4px solid var(--prio-color);
         background: var(--secondary-background-color);
       }
+      li.post.unread {
+        background: rgba(var(--rgb-primary-color), 0.14);
+      }
       button.open {
         display: flex;
         flex: 1;
@@ -351,8 +378,16 @@ class MessageBoardCard extends LitElement {
         font-weight: 500;
         overflow-wrap: anywhere;
       }
-      button.open.unread .title {
+      li.post.unread .title {
         font-weight: 700;
+      }
+      .status {
+        font-size: 0.8em;
+        color: var(--secondary-text-color);
+      }
+      .status.new {
+        color: var(--primary-color);
+        font-weight: 500;
       }
       .headline {
         display: flex;
