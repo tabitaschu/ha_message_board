@@ -16,6 +16,7 @@ Bearbeiten, Archiv, Löschen.
 Die Integration liefert die Card selbst aus. Erscheint sie nicht in der Kartenauswahl, als Ressource
 eintragen (*Einstellungen → Dashboards → ⋮ → Ressourcen*): URL `/message_board/message-board-card.js?v=<Version>`,
 Typ *JavaScript-Modul*. `<Version>` = `version` aus `manifest.json`, nach jedem Update anpassen.
+Steht dort noch eine alte Version, lädt der Browser die alte Card bzw. findet sie gar nicht.
 
 ## Verhalten
 

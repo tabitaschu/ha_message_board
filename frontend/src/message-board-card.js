@@ -1,7 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { BoardApi } from "./api.js";
 import "./menu.js";
-import { openMenuOnContext, postMenuItems, postProperties } from "./parts.js";
+import { openMenuOnContext, postMenuItems, postProperties, richText } from "./parts.js";
 import "./post-form.js";
 import { sharedStyles } from "./styles.js";
 import "./thread-view.js";
@@ -245,7 +245,9 @@ class MessageBoardCard extends LitElement {
           </span>
           ${
             thread.messages[0].text
-              ? html`<span class="preview">${thread.messages[0].text}</span>`
+              ? html`<span class="preview"
+                  >${richText(thread.messages[0].text, ctx.memes, { thumbnail: true })}</span
+                >`
               : ""
           }
           <span class="properties">${postProperties(thread)}</span>

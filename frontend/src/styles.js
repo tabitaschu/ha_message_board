@@ -65,6 +65,13 @@ export const sharedStyles = css`
     margin: 4px 0;
     border-radius: 8px;
   }
+  img.meme.thumbnail {
+    display: inline-block;
+    height: 48px;
+    margin: 0 2px;
+    vertical-align: middle;
+    border-radius: 4px;
+  }
   .tag {
     display: inline-flex;
     align-items: center;

@@ -41,7 +41,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await hass.async_add_executor_job(lambda: memes_dir.mkdir(parents=True, exist_ok=True))
     await hass.http.async_register_static_paths(
         [
-            StaticPathConfig(CARD_URL, str(card_file), cache_headers=True),
+            # No long-term browser caching: a stale card survives reloads and is hard to clear.
+            StaticPathConfig(CARD_URL, str(card_file), cache_headers=False),
             StaticPathConfig(MEMES_URL, str(memes_dir), cache_headers=False),
         ]
     )

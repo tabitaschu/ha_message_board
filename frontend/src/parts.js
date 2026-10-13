@@ -5,15 +5,19 @@ import { PRIORITY_LABELS, confirmDelete, insertAtCursor, notifyError } from "./u
 
 const SHORTCODE = /:([a-z0-9_-]+):/gi;
 
-/** Message text with known meme shortcodes (":name:") shown as images. */
-export function richText(text, memes) {
+/**
+ * Message text with known meme shortcodes (":name:") shown as images.
+ * `thumbnail` renders them small and inline (list previews).
+ */
+export function richText(text, memes, { thumbnail = false } = {}) {
+  const cls = thumbnail ? "meme thumbnail" : "meme";
   const parts = [];
   let last = 0;
   for (const match of text.matchAll(SHORTCODE)) {
     const url = memes.get(match[1].toLowerCase());
     if (!url) continue; // unknown shortcode stays plain text
     parts.push(text.slice(last, match.index));
-    parts.push(html`<img class="meme" src=${url} alt=${match[0]} title=${match[0]} />`);
+    parts.push(html`<img class=${cls} src=${url} alt=${match[0]} title=${match[0]} />`);
     last = match.index + match[0].length;
   }
   parts.push(text.slice(last));
