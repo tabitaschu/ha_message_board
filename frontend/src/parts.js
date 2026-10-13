@@ -1,6 +1,37 @@
 // Templates and actions shared by the inbox list and the thread view.
 import { html } from "lit";
-import { PRIORITY_LABELS, confirmDelete, notifyError } from "./util.js";
+import "./meme-picker.js";
+import { PRIORITY_LABELS, confirmDelete, insertAtCursor, notifyError } from "./util.js";
+
+const SHORTCODE = /:([a-z0-9_-]+):/gi;
+
+/** Message text with known meme shortcodes (":name:") shown as images. */
+export function richText(text, memes) {
+  const parts = [];
+  let last = 0;
+  for (const match of text.matchAll(SHORTCODE)) {
+    const url = memes.get(match[1].toLowerCase());
+    if (!url) continue; // unknown shortcode stays plain text
+    parts.push(text.slice(last, match.index));
+    parts.push(html`<img class="meme" src=${url} alt=${match[0]} title=${match[0]} />`);
+    last = match.index + match[0].length;
+  }
+  parts.push(text.slice(last));
+  return parts;
+}
+
+/**
+ * GIF button for a text field: inserts the chosen shortcode at the cursor of
+ * `field()` and passes the new value to `onChange`. Renders nothing without
+ * `loadMemes`.
+ */
+export function memeButton(loadMemes, field, onChange) {
+  if (!loadMemes) return "";
+  return html`<mb-meme-picker
+    .loadMemes=${loadMemes}
+    @meme-select=${(e) => onChange(insertAtCursor(field(), `:${e.detail}: `))}
+  ></mb-meme-picker>`;
+}
 
 /** Priority badge (only when not "normal") and tag chips of a post. */
 export const postProperties = (thread) => html`

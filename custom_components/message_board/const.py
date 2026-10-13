@@ -22,3 +22,9 @@ MAX_TAGS = 10
 MAX_TAG_LENGTH = 30
 
 CARD_URL = f"/{DOMAIN}/message-board-card.js"
+
+# Meme/reaction images: files in <config>/message_board/memes, served locally
+# (no external requests). The file name without extension is the shortcode, e.g. :bitte:
+MEMES_DIR = f"{DOMAIN}/memes"
+MEMES_URL = f"/{DOMAIN}/memes"
+MEME_EXTENSIONS = (".gif", ".png", ".jpg", ".jpeg", ".webp")

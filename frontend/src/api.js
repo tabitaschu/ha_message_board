@@ -32,6 +32,11 @@ export class BoardApi {
     return this._send("edit", { thread_id: threadId, message_id: messageId, text });
   }
 
+  /** Meme images on the server: [{ name, url }]. */
+  memes() {
+    return this._send("memes", {});
+  }
+
   react(threadId, messageId, emoji) {
     return this._send("react", { thread_id: threadId, message_id: messageId, emoji });
   }

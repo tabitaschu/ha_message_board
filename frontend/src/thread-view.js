@@ -1,7 +1,7 @@
 import { LitElement, css, html } from "lit";
 import "./composer.js";
 import "./menu.js";
-import { openMenuOnContext, postMenuItems, postProperties } from "./parts.js";
+import { openMenuOnContext, postMenuItems, postProperties, richText } from "./parts.js";
 import "./post-form.js";
 import { sharedStyles } from "./styles.js";
 import { define, notifyError, relativeTime } from "./util.js";
@@ -15,7 +15,8 @@ import { define, notifyError, relativeTime } from "./util.js";
 class MbThread extends LitElement {
   static properties = {
     thread: { attribute: false },
-    ctx: { attribute: false }, // { api, me, names, reactions, priorities, knownTags, language }
+    // { api, me, names, reactions, priorities, knownTags, memes, loadMemes, language }
+    ctx: { attribute: false },
     startEditing: { type: Boolean },
     _editingPost: { state: true },
     _editingComment: { state: true }, // message id
@@ -44,6 +45,7 @@ class MbThread extends LitElement {
       <div class="comments">${comments.map((m) => this._renderComment(m))}</div>
       <mb-composer
         placeholder="Kommentieren…"
+        .loadMemes=${this.ctx.loadMemes}
         .send=${(text) => this.ctx.api.reply(this.thread.id, text)}
       ></mb-composer>
     `;
@@ -68,7 +70,7 @@ class MbThread extends LitElement {
         </header>
         <h2>${thread.title}</h2>
         <div class="properties">${postProperties(thread)}</div>
-        ${post.text ? html`<div class="text">${post.text}</div>` : ""}
+        ${post.text ? html`<div class="text">${richText(post.text, ctx.memes)}</div>` : ""}
         ${this._renderReactions(post)}
       </article>
     `;
@@ -88,6 +90,7 @@ class MbThread extends LitElement {
         .priority=${thread.priority}
         .priorities=${ctx.priorities}
         .suggestions=${ctx.knownTags}
+        .loadMemes=${ctx.loadMemes}
         .send=${(values) => this._savePost(values)}
         @cancel=${() => (this._editingPost = false)}
       ></mb-post-form>
@@ -110,10 +113,11 @@ class MbThread extends LitElement {
                 cancelable
                 label="Speichern"
                 .value=${message.text}
+                .loadMemes=${ctx.loadMemes}
                 .send=${(text) => this._saveComment(message.id, text)}
                 @cancel=${() => (this._editingComment = null)}
               ></mb-composer>`
-            : html`<div class="text">${message.text}</div>`
+            : html`<div class="text">${richText(message.text, ctx.memes)}</div>`
         }
         ${this._renderReactions(
           message,

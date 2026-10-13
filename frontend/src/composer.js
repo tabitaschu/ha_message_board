@@ -1,5 +1,6 @@
 import { LitElement, css, html } from "lit";
 import { sharedStyles } from "./styles.js";
+import { memeButton } from "./parts.js";
 import { define, notifyError } from "./util.js";
 
 /**
@@ -14,6 +15,7 @@ class MbComposer extends LitElement {
     placeholder: { type: String },
     label: { type: String },
     cancelable: { type: Boolean },
+    loadMemes: { attribute: false }, // enables the GIF button
     _busy: { state: true },
   };
 
@@ -34,6 +36,12 @@ class MbComposer extends LitElement {
         @keydown=${this._onKeyDown}
       ></textarea>
       <div class="actions">
+        ${memeButton(
+          this.loadMemes,
+          () => this.renderRoot.querySelector("textarea"),
+          (value) => (this.value = value),
+        )}
+        <span class="spacer"></span>
         ${
           this.cancelable
             ? html`<button
@@ -85,9 +93,12 @@ class MbComposer extends LitElement {
         border: 1px solid var(--divider-color);
         border-radius: 8px;
       }
+      .spacer {
+        flex: 1;
+      }
       .actions {
         display: flex;
-        justify-content: flex-end;
+        align-items: center;
         gap: 8px;
         margin-top: 4px;
       }

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.message_board.const import CARD_URL, CONF_USERS, DOMAIN
+from custom_components.message_board.const import CARD_URL, CONF_USERS, DOMAIN, MEMES_DIR, MEMES_URL
 
 CLIENT_ID = "https://example.com/app"
 
@@ -138,3 +140,18 @@ async def test_delete(hass: HomeAssistant, setup) -> None:
     assert (await _cmd(bob_ws, "delete", thread_id=thread["id"]))["success"]
     await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.message_board_unread_bob").state == "off"
+
+
+async def test_memes_listed_and_served_locally(hass: HomeAssistant, setup, hass_client) -> None:
+    _, _, alice_ws, _ = setup
+    folder = Path(hass.config.path(MEMES_DIR))
+    for name in ("bitte.gif", "Facepalm.PNG", "not a code.gif", "notes.txt"):
+        (folder / name).write_bytes(b"GIF89a")  # created by the integration on setup
+
+    result = await _cmd(alice_ws, "memes")
+    assert result["result"] == [
+        {"name": "bitte", "url": f"{MEMES_URL}/bitte.gif"},
+        {"name": "facepalm", "url": f"{MEMES_URL}/Facepalm.PNG"},
+    ]
+    response = await (await hass_client()).get(f"{MEMES_URL}/bitte.gif")
+    assert response.status == 200

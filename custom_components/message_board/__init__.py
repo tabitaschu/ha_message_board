@@ -16,7 +16,15 @@ from homeassistant.loader import async_get_integration
 
 from . import websocket_api
 from .board import Board
-from .const import CARD_URL, CONF_USERS, DOMAIN, STORAGE_KEY, STORAGE_VERSION
+from .const import (
+    CARD_URL,
+    CONF_USERS,
+    DOMAIN,
+    MEMES_DIR,
+    MEMES_URL,
+    STORAGE_KEY,
+    STORAGE_VERSION,
+)
 from .websocket_api import DATA_BOARD
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -26,11 +34,16 @@ type MessageBoardConfigEntry = ConfigEntry[Board]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register WebSocket commands and serve the card (once per HA start)."""
+    """Register WebSocket commands, serve the card and the meme folder (once per HA start)."""
     websocket_api.async_register(hass)
     card_file = Path(__file__).parent / "frontend" / "message-board-card.js"
+    memes_dir = Path(hass.config.path(MEMES_DIR))
+    await hass.async_add_executor_job(lambda: memes_dir.mkdir(parents=True, exist_ok=True))
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(CARD_URL, str(card_file), cache_headers=True)]
+        [
+            StaticPathConfig(CARD_URL, str(card_file), cache_headers=True),
+            StaticPathConfig(MEMES_URL, str(memes_dir), cache_headers=False),
+        ]
     )
     # Version query busts the browser cache after updates.
     version = (await async_get_integration(hass, DOMAIN)).version

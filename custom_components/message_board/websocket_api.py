@@ -6,8 +6,11 @@ never from the client payload.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
@@ -15,7 +18,15 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util.hass_dict import HassKey
 
 from .board import Board, BoardError, is_unread
-from .const import DEFAULT_PRIORITY, DOMAIN, PRIORITIES, REACTIONS
+from .const import (
+    DEFAULT_PRIORITY,
+    DOMAIN,
+    MEME_EXTENSIONS,
+    MEMES_DIR,
+    MEMES_URL,
+    PRIORITIES,
+    REACTIONS,
+)
 
 DATA_BOARD: HassKey[Board] = HassKey(DOMAIN)
 
@@ -25,6 +36,7 @@ Apply = Callable[[Board, str, dict[str, Any]], object]
 @callback
 def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_subscribe)
+    websocket_api.async_register_command(hass, ws_memes)
     for command in _MUTATIONS:
         websocket_api.async_register_command(hass, command)
 
@@ -75,6 +87,35 @@ async def ws_subscribe(
     connection.subscriptions[msg["id"]] = board.add_listener(push)
     connection.send_result(msg["id"])
     push(me=me, users=users, reactions=REACTIONS, priorities=PRIORITIES)
+
+
+MEME_NAME = re.compile(r"^[a-z0-9_-]+$")
+
+
+def list_memes(folder: Path) -> list[dict[str, str]]:
+    """Images in the meme folder as [{name, url}], sorted by name. Blocking I/O.
+
+    Files whose name is not a valid shortcode (a-z, 0-9, _ and -) are skipped,
+    so a shortcode always maps to exactly one file.
+    """
+    memes = {}
+    for file in sorted(folder.iterdir()) if folder.is_dir() else []:
+        name = file.stem.lower()
+        if file.suffix.lower() in MEME_EXTENSIONS and MEME_NAME.match(name):
+            memes.setdefault(name, f"{MEMES_URL}/{quote(file.name)}")
+    return [{"name": name, "url": url} for name, url in sorted(memes.items())]
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/memes"})
+@websocket_api.async_response
+async def ws_memes(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List meme images. Read on demand, so new files appear without a restart."""
+    if _board(hass, connection, msg["id"]) is None:
+        return
+    folder = Path(hass.config.path(MEMES_DIR))
+    connection.send_result(msg["id"], await hass.async_add_executor_job(list_memes, folder))
 
 
 def _mutation(command: str, schema: dict[Any, Any], apply: Apply) -> Callable[..., None]:

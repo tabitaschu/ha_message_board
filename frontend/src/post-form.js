@@ -1,5 +1,6 @@
 import { LitElement, css, html } from "lit";
 import { sharedStyles } from "./styles.js";
+import { memeButton } from "./parts.js";
 import { define, PRIORITY_LABELS, notifyError } from "./util.js";
 
 /**
@@ -19,6 +20,7 @@ class MbPostForm extends LitElement {
     priority: { type: String },
     withContent: { type: Boolean },
     cancelable: { type: Boolean },
+    loadMemes: { attribute: false }, // enables the GIF button
     placeholder: { type: String },
     label: { type: String },
     _tagDraft: { state: true },
@@ -97,6 +99,16 @@ class MbPostForm extends LitElement {
         </div>
       </div>
       <div class="actions">
+        ${
+          this.withContent
+            ? memeButton(
+                this.loadMemes,
+                () => this.renderRoot.querySelector("textarea"),
+                (value) => (this.text = value),
+              )
+            : ""
+        }
+        <span class="spacer"></span>
         ${
           this.cancelable
             ? html`<button
@@ -221,9 +233,12 @@ class MbPostForm extends LitElement {
         padding: 2px 10px;
         font-size: 0.9em;
       }
+      .spacer {
+        flex: 1;
+      }
       .actions {
         display: flex;
-        justify-content: flex-end;
+        align-items: center;
         gap: 8px;
       }
     `,
