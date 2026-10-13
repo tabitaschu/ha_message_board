@@ -108,18 +108,27 @@ _MUTATIONS = (
         "create",
         {
             vol.Required("recipient"): str,
-            **_TEXT,
+            vol.Required("title"): str,
+            vol.Optional("text", default=""): str,
             vol.Optional("tags", default=[]): _TAGS,
             vol.Optional("priority", default=DEFAULT_PRIORITY): _PRIORITY,
         },
         lambda b, user, m: b.create_thread(
-            user, m["recipient"], m["text"], m["tags"], m["priority"]
+            user, m["recipient"], m["title"], m["text"], m["tags"], m["priority"]
         ),
     ),
     _mutation(
         "update",
-        {**_THREAD, vol.Optional("tags"): _TAGS, vol.Optional("priority"): _PRIORITY},
-        lambda b, user, m: b.update_post(user, m["thread_id"], m.get("tags"), m.get("priority")),
+        {
+            **_THREAD,
+            vol.Optional("title"): str,
+            vol.Optional("text"): str,
+            vol.Optional("tags"): _TAGS,
+            vol.Optional("priority"): _PRIORITY,
+        },
+        lambda b, user, m: b.update_post(
+            user, m["thread_id"], m.get("title"), m.get("text"), m.get("tags"), m.get("priority")
+        ),
     ),
     _mutation(
         "delete",
@@ -134,7 +143,7 @@ _MUTATIONS = (
     _mutation(
         "edit",
         {**_MESSAGE, **_TEXT},
-        lambda b, user, m: b.edit(user, m["thread_id"], m["message_id"], m["text"]),
+        lambda b, user, m: b.edit_comment(user, m["thread_id"], m["message_id"], m["text"]),
     ),
     _mutation(
         "react",

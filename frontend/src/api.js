@@ -11,11 +11,11 @@ export class BoardApi {
     return this._connection.subscribeMessage(onEvent, { type: `${PREFIX}/subscribe` });
   }
 
-  create(recipient, { text, tags, priority }) {
-    return this._send("create", { recipient, text, tags, priority });
+  create(recipient, { title, text, tags, priority }) {
+    return this._send("create", { recipient, title, text, tags, priority });
   }
 
-  /** Change post properties; pass only what changes ({ tags, priority }). */
+  /** Change the post; pass only what changes ({ title, text, tags, priority }). */
   update(threadId, properties) {
     return this._send("update", { thread_id: threadId, ...properties });
   }
@@ -28,7 +28,7 @@ export class BoardApi {
     return this._send("reply", { thread_id: threadId, text });
   }
 
-  edit(threadId, messageId, text) {
+  editComment(threadId, messageId, text) {
     return this._send("edit", { thread_id: threadId, message_id: messageId, text });
   }
 

@@ -12,9 +12,12 @@ REACTIONS = ("👍", "❤️", "😂", "😮", "😢", "✅")
 
 MAX_TEXT_LENGTH = 2000
 
-# Post properties. Ordered low -> high; the card uses this order for sorting.
-PRIORITIES = ("low", "normal", "high")
+# Post properties. Ordered lowest -> highest; the card uses this order for sorting.
+PRIORITIES = ("info", "low", "normal", "high")
 DEFAULT_PRIORITY = "normal"
+# New posts with these priorities need attention (see binary_sensor attention_*).
+ATTENTION_PRIORITIES = ("normal", "high")
+MAX_TITLE_LENGTH = 120
 MAX_TAGS = 10
 MAX_TAG_LENGTH = 30
 

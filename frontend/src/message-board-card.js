@@ -11,23 +11,32 @@ import {
   lastMessage,
   notifyError,
   relativeTime,
+  SORTS,
   seenByOther,
-  sortByPriority,
 } from "./util.js";
+
+const SORT_STORAGE_KEY = "message-board-sort";
 
 /**
  * Lovelace card: one inbox per board member.
  * "Meine Inbox" holds threads addressed to me; "Inbox <name>" holds the
  * threads I sent to that person. Wide cards show inboxes side by side,
- * narrow cards as tabs.
+ * narrow cards as tabs. Lists are sorted by newest activity or priority.
  */
 class MessageBoardCard extends LitElement {
   static properties = {
     _data: { state: true }, // { me, users, reactions, priorities, threads } from the subscription
     _error: { state: true },
     _openThreadId: { state: true },
+    _editOnOpen: { state: true },
     _activeInbox: { state: true },
+    _sort: { state: true }, // key of SORTS, remembered per browser
   };
+
+  constructor() {
+    super();
+    this._sort = readStorage(SORT_STORAGE_KEY) in SORTS ? readStorage(SORT_STORAGE_KEY) : "time";
+  }
 
   setConfig(config) {
     this._config = config;
@@ -128,6 +137,7 @@ class MessageBoardCard extends LitElement {
             ? html`<mb-thread
                 .thread=${thread}
                 .ctx=${ctx}
+                ?startEditing=${this._editOnOpen}
                 @back=${() => (this._openThreadId = null)}
               ></mb-thread>`
             : this._renderInboxes(ctx)
@@ -140,18 +150,23 @@ class MessageBoardCard extends LitElement {
     const inboxes = this._inboxes();
     const active = this._activeInbox ?? ctx.me;
     return html`
-      <nav class="tabs">
-        ${inboxes.map(
-          (inbox) => html`
-            <button
-              class=${inbox.id === active ? "" : "secondary"}
-              @click=${() => (this._activeInbox = inbox.id)}
-            >
-              ${inbox.title} ${this._renderBadge(inbox)}
-            </button>
-          `,
-        )}
-      </nav>
+      <div class="toolbar">
+        <nav class="tabs">
+          ${inboxes.map(
+            (inbox) => html`
+              <button
+                class=${inbox.id === active ? "" : "secondary"}
+                @click=${() => (this._activeInbox = inbox.id)}
+              >
+                ${inbox.title} ${this._renderBadge(inbox)}
+              </button>
+            `,
+          )}
+        </nav>
+        <button class="plain sort" title="Sortierung wechseln" @click=${this._toggleSort}>
+          ⇅ ${SORTS[this._sort].label}
+        </button>
+      </div>
       <div class="inboxes">
         ${inboxes.map(
           (inbox) => html`
@@ -160,8 +175,8 @@ class MessageBoardCard extends LitElement {
               ${
                 inbox.composeTo
                   ? html`<mb-post-form
-                      withText
-                      placeholder="Neue Nachricht an ${inbox.composeTo.name}…"
+                      withContent
+                      placeholder="Neuer Post an ${inbox.composeTo.name}…"
                       .priorities=${ctx.priorities}
                       .suggestions=${ctx.knownTags}
                       .send=${(post) => ctx.api.create(inbox.composeTo.id, post)}
@@ -169,7 +184,7 @@ class MessageBoardCard extends LitElement {
                   : ""
               }
               ${this._renderThreadList(
-                sortByPriority(
+                SORTS[this._sort].apply(
                   inbox.threads.filter((t) => !t.archived),
                   ctx.priorities,
                 ),
@@ -212,14 +227,16 @@ class MessageBoardCard extends LitElement {
     const comments = thread.messages.length - 1;
     return html`
       <li class="post prio-${thread.priority}" @contextmenu=${openMenuOnContext}>
-        <button
-          class="open ${thread.unread ? "unread" : ""}"
-          @click=${() => (this._openThreadId = thread.id)}
-        >
+        <button class="open ${thread.unread ? "unread" : ""}" @click=${() => this._open(thread.id)}>
           <span class="headline">
             ${thread.unread ? html`<span class="dot"></span>` : ""}
-            <span class="preview">${thread.messages[0].text}</span>
+            <span class="title">${thread.title}</span>
           </span>
+          ${
+            thread.messages[0].text
+              ? html`<span class="preview">${thread.messages[0].text}</span>`
+              : ""
+          }
           <span class="properties">${postProperties(thread)}</span>
           <span class="meta">
             ${relativeTime(lastMessage(thread).created, ctx.language)}
@@ -227,9 +244,22 @@ class MessageBoardCard extends LitElement {
             ${seenByOther(thread, ctx.me) ? " · gelesen ✓" : ""}
           </span>
         </button>
-        <mb-menu .items=${postMenuItems(this, ctx, thread)}></mb-menu>
+        <mb-menu
+          .items=${postMenuItems(this, ctx, thread, { edit: () => this._open(thread.id, true) })}
+        ></mb-menu>
       </li>
     `;
+  }
+
+  _open(threadId, edit = false) {
+    this._editOnOpen = edit;
+    this._openThreadId = threadId;
+  }
+
+  _toggleSort() {
+    const keys = Object.keys(SORTS);
+    this._sort = keys[(keys.indexOf(this._sort) + 1) % keys.length];
+    writeStorage(SORT_STORAGE_KEY, this._sort);
   }
 
   static styles = [
@@ -239,10 +269,18 @@ class MessageBoardCard extends LitElement {
         container-type: inline-size;
         padding: 16px;
       }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
       .tabs {
         display: flex;
         gap: 8px;
-        margin-bottom: 12px;
+      }
+      .sort {
+        margin-left: auto;
       }
       .inboxes {
         display: grid;
@@ -309,8 +347,12 @@ class MessageBoardCard extends LitElement {
         color: var(--primary-text-color);
         background: none;
       }
-      button.open.unread .preview {
-        font-weight: 600;
+      .title {
+        font-weight: 500;
+        overflow-wrap: anywhere;
+      }
+      button.open.unread .title {
+        font-weight: 700;
       }
       .headline {
         display: flex;
@@ -326,8 +368,9 @@ class MessageBoardCard extends LitElement {
         margin: 6px 4px 0 0;
       }
       .preview {
+        color: var(--secondary-text-color);
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
         -webkit-box-orient: vertical;
         overflow: hidden;
         overflow-wrap: anywhere;
@@ -352,4 +395,21 @@ if (!window.customCards.some((c) => c.type === "message-board-card")) {
     name: "Message Board",
     description: "Inboxen mit Posts, Tags, Priorität und Kommentaren.",
   });
+}
+
+// Browser storage may be unavailable (private mode, blocked site data).
+function readStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* preference just isn't remembered */
+  }
 }

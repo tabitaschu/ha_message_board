@@ -24,11 +24,18 @@ export function relativeTime(timestamp, language) {
   return rtf.format(0, "second");
 }
 
-export const PRIORITY_LABELS = { low: "Niedrig", normal: "Normal", high: "Hoch" };
+export const PRIORITY_LABELS = { info: "Info", low: "Niedrig", normal: "Normal", high: "Hoch" };
 
-/** Highest priority first; keeps the server's newest-activity order within a priority. */
-export const sortByPriority = (threads, priorities) =>
-  [...threads].sort((a, b) => priorities.indexOf(b.priority) - priorities.indexOf(a.priority));
+/** List orders. The server sends threads newest activity first, so "time" keeps that order. */
+export const SORTS = {
+  time: { label: "Neueste", apply: (threads) => threads },
+  priority: {
+    label: "Priorität",
+    // Highest priority first; stable sort keeps newest activity within a priority.
+    apply: (threads, priorities) =>
+      [...threads].sort((a, b) => priorities.indexOf(b.priority) - priorities.indexOf(a.priority)),
+  },
+};
 
 /** All tags in use, for suggestions (case-insensitive unique, sorted). */
 export function knownTags(threads) {

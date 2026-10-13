@@ -48,6 +48,7 @@ async def test_full_flow(hass: HomeAssistant, setup) -> None:
     alice, bob, alice_ws, bob_ws = setup
     sensor_alice = "binary_sensor.message_board_unread_mock_user"
     sensor_bob = "binary_sensor.message_board_unread_bob"
+    attention_bob = "binary_sensor.message_board_attention_bob"
 
     first = await _subscribe(bob_ws)
     assert first["me"] == bob.id
@@ -55,7 +56,7 @@ async def test_full_flow(hass: HomeAssistant, setup) -> None:
     assert first["threads"] == []
 
     # Alice posts into Bob's inbox: only Bob's sensor turns on.
-    assert (await _cmd(alice_ws, "create", recipient=bob.id, text="Einkaufen?"))["success"]
+    assert (await _cmd(alice_ws, "create", recipient=bob.id, title="Einkaufen?"))["success"]
     pushed = (await bob_ws.receive_json())["event"]
     (thread,) = pushed["threads"]
     assert thread["unread"] is True
@@ -63,6 +64,7 @@ async def test_full_flow(hass: HomeAssistant, setup) -> None:
     await hass.async_block_till_done()
     assert hass.states.get(sensor_bob).state == "on"
     assert hass.states.get(sensor_alice).state == "off"
+    assert hass.states.get(attention_bob).state == "on"  # new "normal" post
 
     # Bob reads it: sensor off.
     assert (await _cmd(bob_ws, "mark_read", thread_id=thread["id"]))["success"]
@@ -70,15 +72,16 @@ async def test_full_flow(hass: HomeAssistant, setup) -> None:
     assert hass.states.get(sensor_bob).state == "off"
 
     # Bob may not edit Alice's message.
-    msg_id = thread["messages"][0]["id"]
-    result = await _cmd(bob_ws, "edit", thread_id=thread["id"], message_id=msg_id, text="x")
+    result = await _cmd(bob_ws, "update", thread_id=thread["id"], title="x")
     assert result["error"]["code"] == "unauthorized"
+    assert hass.states.get(attention_bob).state == "off"  # read -> no attention
 
     # Bob replies: Alice's sensor on.
     assert (await _cmd(bob_ws, "reply", thread_id=thread["id"], text="Ja 👍"))["success"]
     await hass.async_block_till_done()
     assert hass.states.get(sensor_alice).state == "on"
-    assert hass.states.get(sensor_alice).attributes["unread_threads"] == 1
+    assert hass.states.get(sensor_alice).attributes["threads"] == 1
+    assert hass.states.get("binary_sensor.message_board_attention_mock_user").state == "off"
 
     # Both may change post properties.
     result = await _cmd(bob_ws, "update", thread_id=thread["id"], tags=["Einkauf"], priority="high")
@@ -94,7 +97,7 @@ async def test_full_flow(hass: HomeAssistant, setup) -> None:
 
 async def test_reaction_schema_rejects_unknown_emoji(hass: HomeAssistant, setup) -> None:
     _, bob, alice_ws, _ = setup
-    await _cmd(alice_ws, "create", recipient=bob.id, text="Hi")
+    await _cmd(alice_ws, "create", recipient=bob.id, title="Hi")
     result = await _cmd(alice_ws, "react", thread_id="x", message_id="y", emoji="🦄")
     assert result["error"]["code"] == "invalid_format"
 
@@ -128,9 +131,10 @@ async def test_config_flow(hass: HomeAssistant, hass_admin_user) -> None:
 
 async def test_delete(hass: HomeAssistant, setup) -> None:
     _, bob, alice_ws, bob_ws = setup
-    await _cmd(alice_ws, "create", recipient=bob.id, text="Hi", tags=["Test"], priority="low")
+    await _cmd(alice_ws, "create", recipient=bob.id, title="Hi", tags=["Test"], priority="info")
     (thread,) = (await _subscribe(bob_ws))["threads"]
-    assert thread["tags"] == ["Test"] and thread["priority"] == "low"
+    assert thread["tags"] == ["Test"] and thread["priority"] == "info"
+    assert hass.states.get("binary_sensor.message_board_attention_bob").state == "off"
     assert (await _cmd(bob_ws, "delete", thread_id=thread["id"]))["success"]
     await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.message_board_unread_bob").state == "off"

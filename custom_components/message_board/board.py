@@ -13,10 +13,12 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from .const import (
+    ATTENTION_PRIORITIES,
     DEFAULT_PRIORITY,
     MAX_TAG_LENGTH,
     MAX_TAGS,
     MAX_TEXT_LENGTH,
+    MAX_TITLE_LENGTH,
     PRIORITIES,
     REACTIONS,
 )
@@ -48,8 +50,8 @@ class BoardError(Exception):
 class Board:
     """Threads between a fixed set of users.
 
-    A thread is a post (its first message plus tags and priority) with
-    comments (all further messages). Every thread has one sender and one
+    A thread is a post (title, its first message as body, tags, priority)
+    with comments (all further messages). Every thread has one sender and one
     recipient. Inboxes are views: a user's inbox holds the threads whose
     recipient they are.
     """
@@ -63,9 +65,8 @@ class Board:
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
         self._threads = {t["id"]: t for t in data.get("threads", [])}
-        for thread in self._threads.values():  # threads stored before tags/priority existed
-            thread.setdefault("tags", [])
-            thread.setdefault("priority", DEFAULT_PRIORITY)
+        for thread in self._threads.values():
+            _migrate(thread)
 
     # --- queries -------------------------------------------------------------
 
@@ -77,13 +78,17 @@ class Board:
     def unread_count(self, user: str) -> int:
         return sum(is_unread(t, user) for t in self.threads_for(user))
 
+    def attention_count(self, user: str) -> int:
+        return sum(needs_attention(t, user) for t in self.threads_for(user))
+
     # --- commands ------------------------------------------------------------
 
     def create_thread(
         self,
         user: str,
         recipient: str,
-        text: str,
+        title: str,
+        text: str = "",
         tags: list[str] | None = None,
         priority: str = DEFAULT_PRIORITY,
     ) -> Thread:
@@ -91,12 +96,13 @@ class Board:
         self._require_user(recipient)
         if recipient == user:
             raise BoardError("invalid_recipient", "Cannot post to your own inbox")
-        message = _new_message(user, text)
+        message = _new_message(user, text, required=False)
         thread: Thread = {
             "id": uuid.uuid4().hex,
             "sender": user,
             "recipient": recipient,
             "archived": False,
+            "title": _clean_title(title),
             "tags": _clean_tags(tags or []),
             "priority": _check_priority(priority),
             "messages": [message],
@@ -114,11 +120,16 @@ class Board:
         thread["last_read"][user] = message["created"]
         self._changed()
 
-    def edit(self, user: str, thread_id: str, message_id: str, text: str) -> None:
-        """Edit own message. Intentionally does not affect read state."""
+    def edit_comment(self, user: str, thread_id: str, message_id: str, text: str) -> None:
+        """Edit own comment. Intentionally does not affect read state.
+
+        The post body is edited through update_post, together with the title.
+        """
+        thread = self._thread(user, thread_id)
         message = self._message(user, thread_id, message_id)
-        if message["author"] != user:
-            raise BoardError("unauthorized", "Only the author can edit a message")
+        if message is thread["messages"][0]:
+            raise BoardError("invalid_message", "Use update to edit the post")
+        _require_author(message, user)
         message["text"] = _clean_text(text)
         message["edited"] = time.time()
         self._changed()
@@ -141,11 +152,25 @@ class Board:
         self,
         user: str,
         thread_id: str,
+        title: str | None = None,
+        text: str | None = None,
         tags: list[str] | None = None,
         priority: str | None = None,
     ) -> None:
-        """Change post properties. Allowed for both participants; no read-state effect."""
+        """Change the post. Title and body: author only; tags and priority: both.
+
+        No read-state effect. Arguments left at None stay unchanged.
+        """
         thread = self._thread(user, thread_id)
+        post = thread["messages"][0]
+        if title is not None or text is not None:
+            _require_author(post, user)
+        if title is not None:
+            thread["title"] = _clean_title(title)
+        if text is not None:
+            post["text"] = _clean_text(text, required=False)
+        if title is not None or text is not None:
+            post["edited"] = time.time()
         if tags is not None:
             thread["tags"] = _clean_tags(tags)
         if priority is not None:
@@ -214,6 +239,19 @@ def is_unread(thread: Thread, user: str) -> bool:
     return any(m["author"] != user and m["created"] > last_read for m in thread["messages"])
 
 
+def needs_attention(thread: Thread, user: str) -> bool:
+    """True for an unread new post to the user whose priority asks for attention.
+
+    Comments never count: only the post itself does.
+    """
+    return (
+        not thread["archived"]
+        and thread["recipient"] == user
+        and thread["priority"] in ATTENTION_PRIORITIES
+        and thread["messages"][0]["created"] > thread["last_read"].get(user, 0)
+    )
+
+
 def _participates(thread: Thread, user: str) -> bool:
     return user in (thread["sender"], thread["recipient"])
 
@@ -222,20 +260,25 @@ def _last_activity(thread: Thread) -> float:
     return thread["messages"][-1]["created"]
 
 
-def _new_message(author: str, text: str) -> Message:
+def _require_author(message: Message, user: str) -> None:
+    if message["author"] != user:
+        raise BoardError("unauthorized", "Only the author can edit this")
+
+
+def _new_message(author: str, text: str, *, required: bool = True) -> Message:
     return {
         "id": uuid.uuid4().hex,
         "author": author,
-        "text": _clean_text(text),
+        "text": _clean_text(text, required=required),
         "created": time.time(),
         "edited": None,
         "reactions": {},
     }
 
 
-def _clean_text(text: str) -> str:
+def _clean_text(text: str, *, required: bool = True) -> str:
     text = text.strip()
-    if not text:
+    if required and not text:
         raise BoardError("invalid_text", "Message must not be empty")
     if len(text) > MAX_TEXT_LENGTH:
         raise BoardError("invalid_text", f"Max. {MAX_TEXT_LENGTH} characters")
@@ -261,3 +304,23 @@ def _check_priority(priority: str) -> str:
     if priority not in PRIORITIES:
         raise BoardError("invalid_priority", f"Unknown priority: {priority}")
     return priority
+
+
+def _clean_title(title: str) -> str:
+    title = " ".join(title.split())  # single line
+    if not title:
+        raise BoardError("invalid_title", "Title must not be empty")
+    if len(title) > MAX_TITLE_LENGTH:
+        raise BoardError("invalid_title", f"Max. {MAX_TITLE_LENGTH} characters")
+    return title
+
+
+def _migrate(thread: Thread) -> None:
+    """Bring threads stored by older versions to the current shape."""
+    thread.setdefault("tags", [])
+    thread.setdefault("priority", DEFAULT_PRIORITY)
+    if "title" not in thread:  # before titles: first line of the post becomes the title
+        post = thread["messages"][0]
+        first, _, rest = post["text"].partition("\n")
+        thread["title"] = first.strip()[:MAX_TITLE_LENGTH] or "(ohne Titel)"
+        post["text"] = rest.strip()

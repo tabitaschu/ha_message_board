@@ -1,7 +1,8 @@
 # Message Board für Home Assistant
 
-Inboxen zwischen Home-Assistant-Benutzern: Posts mit Tags und Priorität,
-Kommentare darunter, feste Emoji-Reaktionen, Bearbeiten, Archiv, Löschen.
+Inboxen zwischen Home-Assistant-Benutzern: Posts mit Titel, Tags und Priorität
+(Info / Niedrig / Normal / Hoch), Kommentare darunter, feste Emoji-Reaktionen,
+Bearbeiten, Archiv, Löschen.
 
 ## Installation
 
@@ -22,19 +23,26 @@ Typ *JavaScript-Modul*. `<Version>` = `version` aus `manifest.json`, nach jedem 
 |---|---|---|
 | Neuer Post | jedes Mitglied, in die Inbox eines anderen | ja, beim Empfänger |
 | Kommentar | beide Beteiligte | ja, beim anderen; holt den Post aus dem Archiv |
-| Text bearbeiten | nur Autor | nein |
+| Titel / Text bearbeiten | nur Autor | nein |
 | Tags / Priorität ändern | beide Beteiligte | nein |
 | Post löschen (inkl. Kommentare) | beide Beteiligte | – |
 | Reaktion | beide Beteiligte | nein |
-| Archivieren | beide Beteiligte | archivierte Threads zählen nie |
+| Archivieren | beide Beteiligte | archivierte Posts zählen nie |
 
 Ein Post gilt als gelesen, sobald man ihn in der Card öffnet.
-Aktionen für einen Post: Menü „⋮“ oder Rechtsklick. Offene Posts sind nach Priorität sortiert.
+Aktionen für einen Post (Bearbeiten, Archivieren, Löschen): Menü „⋮“ oder Rechtsklick.
+Listen sind nach neuester Aktivität sortiert; „⇅“ schaltet auf Priorität um (pro Browser gemerkt).
 
 ## Schnittstelle
 
-Pro Mitglied: `binary_sensor.message_board_unread_<name>`
-(`on` bei mindestens einem ungelesenen Thread, Attribut `unread_threads`).
+Pro Mitglied zwei Binärsensoren, jeweils mit Attribut `threads` (Anzahl):
+
+| Sensor | `on`, wenn … |
+|---|---|
+| `binary_sensor.message_board_unread_<name>` | irgendein Post ungelesene Inhalte hat (inkl. Kommentare) |
+| `binary_sensor.message_board_attention_<name>` | ein **neuer Post** mit Priorität Normal oder Hoch ungelesen ist; Kommentare, Edits, Info und Niedrig nie |
+
+Für Benachrichtigungen (z. B. eine Lampe) ist `attention` gedacht.
 
 ## Entwicklung
 

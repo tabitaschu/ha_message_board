@@ -55,24 +55,59 @@ def test_mark_read(board: Board) -> None:
     assert board.unread_count(B) == 0
 
 
-def test_edit_and_reaction_do_not_mark_unread(board: Board) -> None:
+def test_edits_and_reactions_do_not_mark_unread(board: Board) -> None:
     with freeze_time("2026-01-01 10:00"):
-        t = board.create_thread(A, B, "Tippfeler")
+        t = board.create_thread(A, B, "Tippfeler", "Text")
+        board.reply(A, t["id"], "Komentar")
         board.mark_read(B, t["id"])
-    msg_id = t["messages"][0]["id"]
+    post_id, comment_id = (m["id"] for m in t["messages"])
     with freeze_time("2026-01-01 11:00"):
-        board.edit(A, t["id"], msg_id, "Tippfehler")
-        board.toggle_reaction(A, t["id"], msg_id, "👍")
-    assert board.unread_count(B) == 0
-    message = thread_of(board, B)["messages"][0]
-    assert message["text"] == "Tippfehler"
-    assert message["edited"] is not None
+        board.update_post(A, t["id"], title="Tippfehler", text="")
+        board.edit_comment(A, t["id"], comment_id, "Kommentar")
+        board.toggle_reaction(A, t["id"], post_id, "👍")
+    assert board.unread_count(B) == board.attention_count(B) == 0
+    assert t["title"] == "Tippfehler"
+    assert t["messages"][0]["text"] == ""  # post body is optional
+    assert t["messages"][1]["text"] == "Kommentar"
+    assert all(m["edited"] for m in t["messages"])
 
 
-def test_only_author_can_edit(board: Board) -> None:
+def test_only_author_can_edit_title_text_and_comments(board: Board) -> None:
     t = board.create_thread(A, B, "Hi")
+    board.reply(A, t["id"], "Kommentar")
     with pytest.raises(BoardError, match="author"):
-        board.edit(B, t["id"], t["messages"][0]["id"], "gehackt")
+        board.update_post(B, t["id"], title="gehackt")
+    with pytest.raises(BoardError, match="author"):
+        board.update_post(B, t["id"], text="gehackt")
+    with pytest.raises(BoardError, match="author"):
+        board.edit_comment(B, t["id"], t["messages"][1]["id"], "gehackt")
+
+
+def test_post_body_not_editable_as_comment(board: Board) -> None:
+    t = board.create_thread(A, B, "Hi")
+    with pytest.raises(BoardError):
+        board.edit_comment(A, t["id"], t["messages"][0]["id"], "x")
+
+
+@pytest.mark.parametrize(
+    ("priority", "expected"), [("info", 0), ("low", 0), ("normal", 1), ("high", 1)]
+)
+def test_attention_only_for_new_important_posts(board: Board, priority, expected) -> None:
+    board.create_thread(A, B, "Post", priority=priority)
+    assert board.attention_count(B) == expected
+    assert board.attention_count(A) == 0  # never for the sender
+
+
+def test_comments_never_need_attention(board: Board) -> None:
+    with freeze_time("2026-01-01 10:00"):
+        t = board.create_thread(A, B, "Post", priority="high")
+        board.mark_read(B, t["id"])
+    with freeze_time("2026-01-01 11:00"):
+        board.reply(A, t["id"], "Nachtrag")  # comment to B
+    with freeze_time("2026-01-01 11:01"):
+        board.reply(B, t["id"], "Antwort")  # comment to A (sender)
+    assert board.unread_count(A) == 1
+    assert board.attention_count(A) == board.attention_count(B) == 0
 
 
 def test_reaction_toggles(board: Board) -> None:
@@ -123,7 +158,7 @@ def test_cannot_post_to_own_inbox(board: Board) -> None:
 async def test_persistence_roundtrip() -> None:
     store = FakeStore()
     first = Board(store, [A, B])
-    first.create_thread(A, B, "bleibt")
+    first.create_thread(A, B, "Titel", "bleibt")
     second = Board(store, [A, B])
     await second.async_load()
     assert thread_of(second, B)["messages"][0]["text"] == "bleibt"
@@ -187,7 +222,7 @@ def test_outsider_cannot_update_or_delete(board: Board) -> None:
         board.delete_thread(OUTSIDER, t["id"])
 
 
-async def test_old_data_gets_post_defaults() -> None:
+async def test_old_data_is_migrated() -> None:
     old = {
         "threads": [
             {
@@ -196,7 +231,7 @@ async def test_old_data_gets_post_defaults() -> None:
                 "recipient": B,
                 "archived": False,
                 "last_read": {},
-                "messages": [],
+                "messages": [{"id": "m", "author": A, "text": "Erste Zeile\nRest", "created": 1}],
             }
         ]
     }
@@ -204,3 +239,5 @@ async def test_old_data_gets_post_defaults() -> None:
     await board.async_load()
     thread = board._threads["t"]
     assert thread["tags"] == [] and thread["priority"] == "normal"
+    assert thread["title"] == "Erste Zeile"  # first line becomes the title
+    assert thread["messages"][0]["text"] == "Rest"

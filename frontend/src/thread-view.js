@@ -7,18 +7,25 @@ import { sharedStyles } from "./styles.js";
 import { define, notifyError, relativeTime } from "./util.js";
 
 /**
- * Detail view of a thread: the post (first message) as a full-width card
- * with its properties, below it the comments (all further messages).
+ * Detail view of a thread: the post (title, first message as body,
+ * properties) as a full-width card, below it the comments (all further
+ * messages). With `startEditing` the post opens in edit mode.
  * Fires "back" when the user leaves the thread.
  */
 class MbThread extends LitElement {
   static properties = {
     thread: { attribute: false },
     ctx: { attribute: false }, // { api, me, names, reactions, priorities, knownTags, language }
+    startEditing: { type: Boolean },
     _editingPost: { state: true },
     _editingComment: { state: true }, // message id
     _picker: { state: true }, // message id with open reaction picker
   };
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._editingPost = this.startEditing;
+  }
 
   get _post() {
     return this.thread.messages[0];
@@ -59,8 +66,9 @@ class MbThread extends LitElement {
             })}
           ></mb-menu>
         </header>
+        <h2>${thread.title}</h2>
         <div class="properties">${postProperties(thread)}</div>
-        <div class="text">${post.text}</div>
+        ${post.text ? html`<div class="text">${post.text}</div>` : ""}
         ${this._renderReactions(post)}
       </article>
     `;
@@ -73,7 +81,8 @@ class MbThread extends LitElement {
         class="post prio-${thread.priority}"
         cancelable
         label="Speichern"
-        ?withText=${this._post.author === ctx.me}
+        ?withContent=${this._post.author === ctx.me}
+        .title=${thread.title}
         .text=${this._post.text}
         .tags=${thread.tags}
         .priority=${thread.priority}
@@ -159,19 +168,17 @@ class MbThread extends LitElement {
     this._picker = this._picker === messageId ? null : messageId;
   }
 
-  async _savePost({ text, tags, priority }) {
-    const { api, me } = this.ctx;
-    const post = this._post;
-    const calls = [api.update(this.thread.id, { tags, priority })];
-    if (post.author === me && text.trim() !== post.text) {
-      calls.push(api.edit(this.thread.id, post.id, text));
-    }
-    await Promise.all(calls);
+  async _savePost({ title, text, tags, priority }) {
+    const changes = { tags, priority };
+    // Only send changed content, so "bearbeitet" is not set by property edits.
+    if (title.trim() !== this.thread.title) changes.title = title;
+    if (text.trim() !== this._post.text) changes.text = text;
+    await this.ctx.api.update(this.thread.id, changes);
     this._editingPost = false;
   }
 
   async _saveComment(messageId, text) {
-    await this.ctx.api.edit(this.thread.id, messageId, text);
+    await this.ctx.api.editComment(this.thread.id, messageId, text);
     this._editingComment = null;
   }
 
@@ -203,8 +210,14 @@ class MbThread extends LitElement {
         justify-content: space-between;
         gap: 8px;
       }
+      .post h2 {
+        margin: 8px 0 4px;
+        font-size: 1.3em;
+        font-weight: 500;
+        overflow-wrap: anywhere;
+      }
       .post .text {
-        font-size: 1.15em;
+        font-size: 1.05em;
         margin: 8px 0;
       }
       .properties {

@@ -37,6 +37,9 @@ export const sharedStyles = css`
   }
 
   /* Priority colour, set once per class and reused by borders, badges and buttons. */
+  .prio-info {
+    --prio-color: var(--info-color, #039be5);
+  }
   .prio-low {
     --prio-color: var(--disabled-text-color, #9e9e9e);
   }
