@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Message Board",
+        "description": "Wähle die Personen, die das Board nutzen.",
+        "data": {
+          "users": "Personen"
+        }
+      }
+    },
+    "error": {
+      "too_few_users": "Wähle mindestens zwei Personen."
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Message Board",
+        "description": "Choose the users who share the board.",
+        "data": {
+          "users": "Users"
+        }
+      }
+    },
+    "error": {
+      "too_few_users": "Choose at least two users."
+    }
+  }
+}
